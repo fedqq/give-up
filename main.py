@@ -8,6 +8,8 @@ from ctypes import windll
 
 windll.shcore.SetProcessDpiAwareness(1)
 
+PLAYER_SIZE = 30
+
 class Game:
     def __init__(self) -> None:
         def start():
@@ -21,8 +23,8 @@ class Game:
         self.size = (self.root.winfo_screenheight() / 10) * 9
         
         self.levels = [Level() for _ in range(0, 8)]
-        self.levels[0].add_block(0, 800, 500, 200)
-        self.levels[0].add_block(100, 700, 500, 200)
+        self.levels[0].add_block(0, 800, 500, 200)\
+                      .add_block(100, 700, 500, 50)
         
         self.canvas = tk.Canvas(self.root, width = self.size, height = self.size)
         self.canvas.pack()
@@ -80,7 +82,7 @@ class Game:
             self.y_speed += 1
             
         def test_player(p, block):
-            players = [p, [p[0] + 20, p[1]], [p[0] + 20, p[1] + 20], [p[0], p[1] + 20]]
+            players = [p, [p[0] + PLAYER_SIZE, p[1]], [p[0] + PLAYER_SIZE, p[1] + PLAYER_SIZE], [p[0], p[1] + PLAYER_SIZE]]
             players_in = [in_block(player, block) for player in players]
             for player in players:
                 if not 0 <= player[0] <= 1000 or not 0 <= player[1] <= 1000:
@@ -119,7 +121,8 @@ class Game:
         x, y = self.player
         x = (x/1000) * self.size
         y = (y/1000) * self.size
-        self.canvas.create_rectangle(x, y, x + 20, y + 20, fill = 'red', tag = 'player')
+        size = (PLAYER_SIZE / 1000) * self.size
+        self.canvas.create_rectangle(x, y, x + size, y + size, fill = 'blue', tag = 'player')
         
         self.root.after(13, self.physics_loop)
         
@@ -137,6 +140,7 @@ class Level:
     def add_block(self, x, y, width, height):
         block = [x, y, width, height]
         self.blocks.append(block)
+        return self
         
 def func(f, *args):
     return lambda *a: f(*args)
