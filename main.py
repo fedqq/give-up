@@ -1,9 +1,9 @@
+from __future__ import division
 from collections.abc import Iterable
 import tkinter as tk
 from tkinter import ttk, CENTER, TOP, BOTTOM, LEFT, RIGHT, BOTH, X, Y
 import sv_ttk
-from enum import IntEnum
-from copy import copy
+from copy import copy, deepcopy
 from ctypes import windll
 
 windll.shcore.SetProcessDpiAwareness(1)
@@ -11,21 +11,53 @@ windll.shcore.SetProcessDpiAwareness(1)
 PLAYER_SIZE = 30
 DEBUG = True
 
+BLOCK, PAD, MOVEMENT, SPIKES, TOGGLE, GOAL, TRIGGER = 'block', 'pad', 'movement', 'spikes', 'toggle', 'goal', 'trigger'
+
+default_colors = {BLOCK: 'gray', SPIKES: '#e86056', PAD: 'yellow', GOAL: 'green', TRIGGER: ('red', 'green')}
+
 class LevelElement:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, type, *args, **kwargs) -> None:
+        if type not in MOVEMENT + TOGGLE:
+            if 'color' in kwargs:
+                self.color = kwargs['color']
+            else:
+                self.color = default_colors[type]
+        if type == MOVEMENT or type == TOGGLE:
+            self.delay = kwargs['delay']
+        
+        if type == MOVEMENT:
+            self.reps = kwargs['reps']
+            self.moves = kwargs['moves']
+            
+        if type == BLOCK or type == PAD or type == SPIKES or type == GOAL:
+            self.dimensions = list(args)
+            
+        if type == PAD:
+            self.jheight = kwargs['jheight']
+            
+        if type == TRIGGER:
+            self.dimensions = args
+            self.disable_tag = kwargs['disabletag']
+            if 'color' in kwargs:
+                self.color = kwargs['color']
+            else:
+                self.color = default_colors[type]
+        
+        self.tag = kwargs['tag']
 
 class Level:
     def __init__(self) -> None:
-        self.blocks = [[0, 200, 150, 50, 'none']]
-        self.spikes = []
-        self.pads = []
-        self.toggles = []
-        self.movements = []
-        self.goal = [970, 970, 20, 20, 'goal']
+        self.blocks =   [[0, 200, 150, 50, 'none']]
+        self.blocks =   [LevelElement(BLOCK, 0, 200, 150, 50, tag = 'none')]
+        self.spikes:    list[LevelElement] = []
+        self.pads:      list[LevelElement] = []
+        self.toggles:   list[LevelElement] = []
+        self.movements: list[LevelElement] = []
+        self.triggers:  list[LevelElement] = []
+        self.goal =     LevelElement(GOAL, 970, 900, 20, 20, tag = 'goal')
         
-    def add_block(self, x, y, width, height, tag = 'none'):
-        self.blocks.append([x, y, width, height, tag])
+    def add_block(self, x, y, width, height, tag = 'none', color = default_colors[BLOCK]):
+        self.blocks.append(LevelElement(BLOCK, x, y, width, height, tag = tag, color = color))
         return self
     
     def add_movement(self, firstmove, reps = 10, delay = 10, tag = ''): 
@@ -36,14 +68,15 @@ class Level:
         for _ in range(reps):
             move.append(backmove)
             
-        self.movements.append([move, delay, tag])
-    
-    def add_spikes(self, x, y, width, height, tag = 'none'):
-        self.spikes.append([x, y, width, height, tag])
+        self.movements.append(LevelElement(MOVEMENT, tag = tag, delay = delay, reps = reps, moves = move))
         return self
     
-    def add_pad(self, x, y, width, height, jheight = -25, tag = 'none'):
-        self.pads.append([x, y, width, height, tag, jheight])
+    def add_spikes(self, x, y, width, height, tag = 'none', color = default_colors[SPIKES]):
+        self.spikes.append(LevelElement(SPIKES, x, y, width, height, tag = tag, color = color))
+        return self
+    
+    def add_pad(self, x, y, width, height, jheight = -25, tag = 'none', color = default_colors[PAD]):
+        self.pads.append(LevelElement(PAD, x, y, width, height, tag = tag, jheight = jheight, color = color))
         return self
     
     def set_goal(self, x, y, width, height):
@@ -51,8 +84,11 @@ class Level:
         return self
     
     def add_time_toggle(self, tag, time):
-        self.toggles.append([tag, time])
+        self.toggles.append(LevelElement(TOGGLE, delay = time, tag = tag))
         return self
+    
+    def add_trigger(self, x, y, width, height, disabletag, color = default_colors[TRIGGER], tag = 'none'):
+        self.triggers.append(LevelElement(TRIGGER, x, y, width, height, disabletag = disabletag, color = color, tag = tag))
 
 class Game:
     def __init__(self) -> None:
@@ -96,11 +132,6 @@ class Game:
         style.configure('Big.Accent.TButton', font = self.big_font)
         style.configure('Small.Accent.TButton', font = self.small_font)
         
-        if DEBUG:
-            def p(e):
-                print((e.x / self.size)*1000, (e.y / self.size)*1000)
-            self.root.bind('<Button-1>', p)
-        
         self.root.mainloop()
         
     def press_key(self, key):
@@ -137,8 +168,8 @@ class Game:
         self.levels = [Level() for _ in range(0, 8)]
         self.levels[0].add_block(0, 900, 500, 100, 'test')\
                       .add_block(600, 800, 200, 50)\
-                      .add_spikes(100, 600, 500, 100)\
-                      .add_movement([4, -4], tag = 'test', reps = 20, delay = 20)
+                      .add_movement([4, -4], tag = 'test', reps = 20, delay = 20)\
+                      .add_trigger(100, 600, 500, 100, 'test')
                       
         self.levels[1].add_block(30, 900, 500, 100)\
                       .add_block(500, 800, 200, 50)\
@@ -171,12 +202,17 @@ class Game:
         self.physics_loop()
         self.check_move()
         
-    def test_player(self, p, block, check_floor = True, check = BOTH):
-        if block[4] in self.disabled_tags:
+        if DEBUG:
+            def p(e):
+                print((e.x / self.size)*1000, (e.y / self.size)*1000)
+            self.root.bind('<Button-1>', p)
+        
+    def test_player(self, p, element: LevelElement, check_floor = True):
+        if element.tag in self.disabled_tags:
             return False
         half = PLAYER_SIZE / 2
         players = [p, [p[0] + PLAYER_SIZE, p[1]], [p[0] + PLAYER_SIZE, p[1] + PLAYER_SIZE], [p[0], p[1] + PLAYER_SIZE] ,[p[0] + half, p[1] + half]]
-        players_in = [in_block(player, block, check) for player in players]
+        players_in = [in_block(player, element.dimensions) for player in players]
         if check_floor:
             for player in players:
                 if not 0 <= player[0] <= 1000 or not 0 <= player[1] <= 1000:
@@ -184,6 +220,7 @@ class Game:
         return True in players_in
         
     def physics_loop(self):
+        
         if not self.playing:
             return
         self.canvas.delete('player')
@@ -197,7 +234,7 @@ class Game:
         
         for pad in self.level.pads:
             if test_player(self.player, pad, False):
-                self.y_speed = pad[5]
+                self.y_speed = self.proportion(pad.jheight)
                 self.available_jumps = 2
         
         if self.y_speed != 0:
@@ -241,6 +278,14 @@ class Game:
                 if happened:
                     break
                 
+        for trigger in self.level.triggers:
+            if self.test_player(self.player, trigger, False):
+                trigger.timer += 1
+                if trigger.timer == 1:
+                    trigger.func()
+            else:
+                trigger.timer = 0
+                
         self.x_speed *= 0.9
         
         if test_player(self.player, self.level.goal, False):
@@ -259,8 +304,7 @@ class Game:
         y = self.proportion(y, False)
         size = self.proportion(PLAYER_SIZE)
         offset = abs(int((self.y_speed / 1.8) / 1.2))
-        '''self.canvas.create_rectangle(x + offset, y - offset, x + size - offset, y + size + offset, fill = 'blue', tag = 'player')'''
-        self.canvas.create_rectangle(x, y, x + size, y + size, fill = 'blue', tag = 'player')
+        self.canvas.create_rectangle(x + offset, y - offset, x + size - offset, y + size + offset, fill = 'blue', tag = 'player')
         
         self.root.after(13, self.physics_loop)
         
@@ -270,33 +314,33 @@ class Game:
         
         self.disabled_tags = []
         
-        def positions(block):
-            return (block[0], block[1], block[0] + block[2], block[1] + block[3])
+        def positions(elem):
+            return (elem[0], elem[1], elem[0] + elem[2], elem[1] + elem[3])
         
         self.level = copy(lvl)
-        draw_lvl = copy(lvl)
+        draw_lvl = deepcopy(lvl)
         
-        draw_lvl.blocks = [[self.proportion(coord) for coord in block] for block in draw_lvl.blocks]
-        draw_lvl.spikes = [[self.proportion(coord) for coord in spike] for spike in draw_lvl.spikes]
-        draw_lvl.pads = [[self.proportion(coord) for coord in pad[:-1]] + [pad[-1]] for pad in draw_lvl.pads]
-        draw_lvl.goal = [self.proportion(n) for n in draw_lvl.goal]   
-        self.canvas.delete('level')
+        draw_lvl.goal.dimensions = [self.proportion(n) for n in draw_lvl.goal.dimensions]
         
         for block in draw_lvl.blocks:
-            tag = ['level', block[4]]
-            self.canvas.create_rectangle(positions(block), fill = 'gray', tag = tag)
+            block.dimensions = [self.proportion(coord) for coord in block.dimensions]
+            tag = ['level', block.tag]
+            self.canvas.create_rectangle(positions(block.dimensions), fill = block.color, tag = tag)
             
         for spike in draw_lvl.spikes:
-            tag = ['level', spike[4]]
-            self.canvas.create_rectangle(positions(spike), fill = '#e86056', tag = tag)
+            spike.dimensions = [self.proportion(coord) for coord in spike.dimensions]
+            tag = ['level', spike.tag]
+            self.canvas.create_rectangle(positions(spike.dimensions), fill = spike.color, tag = tag)
             size = int(self.size / 400) * 2
             dash = int(size * 10)
             width = int(size / 4)
-            self.canvas.create_line(spike[0] + width, spike[1], spike[0] + spike[2], spike[1], fill = '#e86056', tag = tag, width = size, dash = dash, capstyle = tk.BUTT)
+            sizes = spike.dimensions
+            self.canvas.create_line(sizes[0] + width, sizes[1], sizes[0] + sizes[2], sizes[1], fill = spike.color, tag = tag, width = size, dash = dash, capstyle = tk.BUTT)
         
         for pad in draw_lvl.pads:
+            pad.dimensions = [self.proportion(coord) for coord in pad.dimensions]
             tag = ['level', pad[4]]
-            self.canvas.create_rectangle(positions(pad), fill = 'yellow', tag = tag)
+            self.canvas.create_rectangle(positions(pad.dimensions), fill = pad.color, tag = tag)
             
         for toggle in draw_lvl.toggles:
             def callback(delay, tag):
@@ -308,84 +352,127 @@ class Game:
                 else:
                     self.disabled_tags.append(tag)
                     self.canvas.itemconfigure(tag, state = 'hidden')
-                self.root.after(delay, callback, toggle[1], toggle[0])
-            self.root.after(toggle[1], callback, toggle[1], toggle[0])
+                self.root.after(delay, callback, delay, tag)
+            self.root.after(toggle.delay, callback, toggle.delay, toggle.tag)
             
-        for moves, delay, tag in self.level.movements:
+        for movement in draw_lvl.movements:
+            moves = movement.moves
+            tag = movement.tag
+            delay = movement.delay
             a = 'none'
+            
+            touch = False
             
             if tag == 'goal':
                 a = self.level.goal
                 b = self.level.goal
             else:
                 for test in self.level.blocks:
-                    if tag in test:
+                    if test.tag == tag:
+                        touch = True
                         a = (self.level.blocks.index(test), 'blocks')
                         b = test
                         
                 for test in self.level.spikes:
-                    if tag in test:
+                    if test.tag == tag:
                         a = (self.level.spikes.index(test), 'spikes')
                         b = test
                         
                 for test in self.level.pads:
-                    if tag in test:
+                    if test.tag == tag:
                         a = (self.level.pads.index(test), 'pads')
                         b = test
-            print(b)
+                        
+                for test in self.level.triggers:
+                    if test.tag == tag:
+                        a = (self.level.triggers.index(test), 'triggers')
+                        b = test
                 
             if a == 'none':
                 return
             
-            def callback(count):
+            def move_callback(count):
                 if not self.playing:
                     return
                 x, y = moves[count % len(moves)]
                 
-                was_in = self.test_player(self.player, b, False)
-                if type(a) is tuple:
-                    match a[1]:
-                        case 'pads':
-                            self.level.pads[a[0]][0] += x
-                        case 'blocks':
-                            self.level.blocks[a[0]][0] += x
-                        case 'spikes':
-                            self.level.spikes[a[0]][0] += x
-                else:
-                    self.level.goal[0] += x
-                is_in = self.test_player(self.player, b, False)
-                if not was_in and is_in:
-                    self.player[0] += x
-                if is_in and was_in:
-                    self.die()
-                    return
+                if x != 0:
+                    was_in = self.test_player(self.player, b, False)
+                    if type(a) is tuple:
+                        match a[1]:
+                            case 'pads':
+                                self.level.pads[a[0]].dimensions[0] += x
+                            case 'blocks':
+                                self.level.blocks[a[0]].dimensions[0] += x
+                            case 'spikes':
+                                self.level.spikes[a[0]].dimensions[0] += x
+                            case 'triggers':
+                                self.level.triggers[a[0]].dimensions[0] += x
+                    else:
+                        self.level.goal.dimensions[0] += x
+                    if touch:
+                        is_in = self.test_player(self.player, b, False)
+                        if not was_in and is_in:
+                            self.player[0] += x
+                        if is_in and was_in:
+                            self.die()
+                            return
                 
-                was_in = self.test_player(self.player, b, False)
-                if type(a) is tuple:
-                    match a[1]:
-                        case 'pads':
-                            self.level.pads[a[0]][1] += y
-                        case 'blocks':
-                            self.level.blocks[a[0]][1] += y
-                        case 'spikes':
-                            self.level.spikes[a[0]][1] += y
-                else:
-                    self.level.goal[1] += y
-                is_in = self.test_player(self.player, b, False)
-                if not was_in and is_in:
-                    self.player[1] += y
-                if is_in and was_in:
-                    self.die()
-                    return
+                if y != 0:
+                    was_in = self.test_player(self.player, b, False)
+                    if type(a) is tuple:
+                        match a[1]:
+                            case 'pads':
+                                self.level.pads[a[0]].dimensions[1] += y
+                            case 'blocks':
+                                self.level.blocks[a[0]].dimensions[1] += y
+                            case 'spikes':
+                                self.level.spikes[a[0]].dimensions[1] += y
+                            case 'triggers':
+                                self.level.triggers[a[0]].dimensions[1] += y
+                    else:
+                        self.level.goal.dimensions[1] += y
+                    if touch:
+                        is_in = self.test_player(self.player, b, False)
+                        if is_in:
+                            if was_in:
+                                self.die()
+                                return
+                            else:
+                                self.player[1] += y
                     
                 self.canvas.move(tag, self.proportion(x, False), self.proportion(y, False))
-                self.root.after(delay, callback, count + 1)
-                is_in = self.test_player(self.player, b, False)
+                self.root.after(delay, move_callback, count + 1)
                       
-            callback(0)
+            move_callback(0)
         
-        x, y, width, height = draw_lvl.goal[:-1]
-        self.canvas.create_rectangle(x, y, x + width, y + height, fill = 'green', tag = ('level', 'goal'))
+        for index, trigger in enumerate(draw_lvl.triggers):
+            trigger.dimensions = [self.proportion(coord) for coord in trigger.dimensions]
+            
+            x, y, width, height = trigger.dimensions
+            
+            sprite = self.canvas.create_rectangle(x, y, x + width, y + height, fill = trigger.color[0], tag = trigger.tag)
+            trig = self.level.triggers[index]
+            trig.enabled = False
+            trig.counter = 0
+            self.canvas.itemconfig(trigger.disable_tag, state = 'hidden')
+            def callback():
+                if trig.enabled:
+                    trig.enabled = False
+                    self.canvas.itemconfig(sprite, fill = trigger.color[1])
+                    self.canvas.itemconfig(trig.disable_tag, state = 'hidden')
+                    self.disabled_tags.append(trig.disable_tag)
+                else:
+                    trig.enabled = True
+                    self.canvas.itemconfig(sprite, fill = trigger.color[0])
+                    self.canvas.itemconfig(trig.disable_tag, state = 'normal')
+                    if trig.disable_tag in self.disabled_tags:
+                        self.disabled_tags.remove(trig.disable_tag)
+                    
+            trig.func = callback
+        
+        x, y, width, height = draw_lvl.goal.dimensions
+        self.canvas.create_rectangle(x, y, x + width, y + height, fill = draw_lvl.goal.color, tag = ('level', 'goal'))
         
     def proportion(self, n, i = True):
         if type(n) is str:
