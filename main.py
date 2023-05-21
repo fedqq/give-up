@@ -8,7 +8,7 @@ from ctypes import windll
 from time import time
 from math import floor
 from colour import Color
-from PIL import ImageTk, ImageFilter
+from PIL import ImageTk, ImageFilter, Image
 import pyautogui
 
 windll.shcore.SetProcessDpiAwareness(1)
@@ -23,11 +23,13 @@ VISIBLE = BLOCK+PAD+SPIKES+GOAL+TRIGGER+FLIPPER
 INVISIBLE = MOVEMENT+TOGGLE
 TOUCHTOGGLE = BLOCK+PAD+FLIPPER+TRIGGER
 
-default_colors = {BLOCK: 'gray', SPIKES: '#e86056', PAD: 'yellow', GOAL: 'green', TRIGGER: ('green', 'red'), TRIGGERFLIP: ('red', 'green'), FLIPPER: ('blue')}
+default_colors = {BLOCK: 'gray', SPIKES: '#e86056', PAD: 'yellow', GOAL: None, TRIGGER: ('green', 'red'), TRIGGERFLIP: ('red', 'green'), FLIPPER: ('#44aff2')}
 
 class LevelElement:
     def __init__(self, type, *args, **kwargs) -> None:
         self.tag = kwargs['tag']
+        self.last_press = 0
+        kwargs.setdefault('color', default_colors.get(type))
         
         if type in INVISIBLE:
             self.delay = kwargs['delay']
@@ -56,7 +58,7 @@ class LevelElement:
 class Level:
     def __init__(self) -> None:
         self.blocks =   [[0, 200, 150, 50, 'none']]
-        self.blocks =   [LevelElement(BLOCK, 0, 200, 150, 50, tag = 'none', touchdisable = False)]
+        self.blocks =   [LevelElement(BLOCK, 0, 160, 150, 50, tag = 'none', touchdisable = False)]
         lvllist = list[LevelElement]
         
         self.spikes:    lvllist = []
@@ -99,8 +101,8 @@ class Level:
                             disabledelay = disabledelay))
         return self
     
-    def set_goal(self, x, y, width, height, color = default_colors['goal']):
-        self.goal = LevelElement(GOAL, x, y, width, height, tag = 'goal', color = color)
+    def set_goal(self, x, y, width, height):
+        self.goal = LevelElement(GOAL, x, y, width, height, tag = 'goal')
         return self
     
     def add_time_toggle(self, tag, time):
@@ -156,6 +158,8 @@ class Game:
         self.canvas.update_idletasks()
         self.cwidth, self.cheight = self.canvas.winfo_reqwidth(), self.canvas.winfo_reqheight()
         
+        self.goal_img = tk.PhotoImage(file = 'goalflag.png')
+        
         self.root.wm_attributes('-transparentcolor', '#ab23ff')
         
         self.reset_levels()
@@ -175,8 +179,12 @@ class Game:
         self.huge_font = ('Segoe UI', self.proportion(35))
         self.big_font = ('Segoe UI', self.proportion(25))
         self.small_font = ('Segoe UI', self.proportion(15))
+        self.mini_font = ('Segoe UI', self.proportion(7))
         
-        self.last_image = tk.PhotoImage(file = 'last.png')
+        try:
+            self.last_image = tk.PhotoImage(file = 'last.png')
+        except tk.TclError:
+            self.last_image = tk.PhotoImage(width = self.cheight, height = self.cwidth)
         self.canvas.create_image(0, 0, image = self.last_image, anchor = tk.NW, tag = 'last')
         
         start_btn = ttk.Button(self.canvas, text = 'Start Game', command = start, style = 'Big.Accent.TButton')
@@ -196,8 +204,10 @@ class Game:
         
         style = ttk.Style(self.root)
         style.theme_use('sun-valley-dark')
+        style.configure('Huge.Accent.TButton', font = self.huge_font)
         style.configure('Big.Accent.TButton', font = self.big_font)
         style.configure('Small.Accent.TButton', font = self.small_font)
+        style.configure('Mini.Accent.TButton', font = self.mini_font)
         
         self.root.mainloop()
         
@@ -227,7 +237,7 @@ class Game:
     def space(self):
         if self.available_jumps != 0:
             self.pressed[TOP] = False
-            self.y_speed = -16
+            self.y_speed = -16 * self.gravity
             self.available_jumps -= 1
             
     def move(self, right = False):
@@ -250,9 +260,9 @@ class Game:
         self.canvas.delete('last')
         fr = ttk.Frame(self.canvas)
         lbl = ttk.Label(self.canvas, text = 'Select Level', font = self.big_font)
-        for col in range(5):
+        for col in range(7):
             fr.columnconfigure(col, weight = 1)
-        for row in range(6):
+        for row in range(9):
             fr.rowconfigure(row, weight = 1)
         for index in range(len(self.levels)):
             def func(index = index):
@@ -268,14 +278,16 @@ class Game:
             if self.levels[index].unlocked:
                 state = 'normal'
             btn = ttk.Button(fr, text = str(index + 1), style = 'Big.Accent.TButton', command = func, width = 4, state = state)
-            btn.grid(column = x, row = y, padx = 10, pady = 0, ipady = 15)
+            btn.grid(column = x, row = y, padx = 10, pady = 0)
+            infobtn = ttk.Button(fr, text = 'i', style = 'Mini.Accent.TButton', state = state, width = 1)
+            infobtn.grid(column = x, row = y, sticky = tk.NE, pady = 40)
         lbl.place(relx = 0.5, rely = 0.1, anchor = tk.CENTER)
-        fr.place(relx = 0.5, rely = 0.7, anchor = tk.CENTER, relheight = 0.8, relwidth = 0.8)
+        fr.place(relx = 0.5, rely = 0.7, anchor = tk.CENTER, relheight = 0.9, relwidth = 0.9)
             
     def reset_levels(self):
         self.levels = [Level() for _ in range(0, 8)]
         self.levels[0]\
-            .add_block(100, 700, 100, 50, 'test')\
+            .add_block(100, 700, 100, 50, 'test', touchdisable = True)\
             .add_block(220, 0, 70, 500)\
             .add_block(600, 400, 200, 50)\
             .add_block(855, 199, 200, 50, 'block')\
@@ -285,7 +297,8 @@ class Game:
             .add_pad(400, 830, 50, 50, tag = 'pad', jheight = -20)\
             .add_movement((1, 0), tag = 'test', delay = 40, reps = 30)\
             .add_time_toggle('block', 1000)\
-            .add_flipper(100, 100, PLAYER_SIZE, PLAYER_SIZE, self.size)\
+            .add_flipper(100, 800, PLAYER_SIZE, PLAYER_SIZE, self.size)\
+            .add_flipper(100, 600, PLAYER_SIZE, PLAYER_SIZE, self.size)\
             .add_ground_spikes()\
             .unlock()
         
@@ -362,7 +375,6 @@ class Game:
         if DEBUG:
             def p(e):
                 print((e.x / self.size)*1000, (e.y / self.size)*1000)
-                print(self.disabled_tags)
             self.root.bind('<Button-1>', p)
         
     def test_player(self, p, element: LevelElement, check_floor = True):
@@ -382,8 +394,12 @@ class Game:
             return
         self.canvas.delete('player')
         
-        if self.y_speed < 12 and not self.grounded:
-            self.y_speed += 1
+        condition = self.y_speed > -12
+        if self.gravity == 1:
+            condition = self.y_speed < 12
+        
+        if condition and not self.grounded:
+            self.y_speed += 1 * self.gravity
             
         self.grounded = False
         
@@ -392,11 +408,17 @@ class Game:
         for pad in self.level.pads:
             if test_player(self.player, pad, False):
                 if pad.touch_disable:
-                    self.canvas.delete(pad.tag)
+                    self.canvas.itemconfigure(pad.tag, state = 'hidden')
                     self.disabled_tags.append(pad.tag)
                 if not pad.tag in self.disabled_tags:
                     self.y_speed = self.proportion(pad.jheight)
                     self.available_jumps = 2
+                    
+        for flipper in self.level.flippers:
+            if test_player(self.player, flipper, False):
+                if time() - flipper.last_press > 0.5:
+                    self.gravity *= -1
+                    flipper.last_press = time()
         
         if self.y_speed != 0:
             move = self.y_speed / abs(self.y_speed)
@@ -414,14 +436,14 @@ class Game:
                     if test_player(self.player, block):
                         if block.touch_disable and test_player(self.player, block, False):
                             def disable(block = block):
-                                self.canvas.delete(block.tag)
+                                self.canvas.itemconfigure(block.tag, state = 'hidden')
                                 self.disabled_tags.append(block.tag)
                             self.afters[f'{block.tag}+{block.disable_delay}'] = self.root.after(block.disable_delay, disable)
                         failed = True
-                        if self.y_speed >= 0:
+                        if self.y_speed * self.gravity >= 0:
                             self.grounded = True
                             self.available_jumps = 2
-                        self.y_speed = 1
+                        self.y_speed = 1 * self.gravity
                 if failed:
                     self.player[1] += move
                     break
@@ -436,8 +458,8 @@ class Game:
                 while test_player(self.player, block):
                     if block.touch_disable:
                         def disable(block = block):
-                                self.canvas.delete(block.tag)
-                                self.disabled_tags.append(block.tag)
+                            self.canvas.itemconfigure(block.tag, state = 'hidden')
+                            self.disabled_tags.append(block.tag)
                         self.afters[f'{block.tag}+{block.disable_delay}.'] = self.root.after(block.disable_delay, disable)
                     if count > 8:
                         self.die()
@@ -449,17 +471,16 @@ class Game:
                 if happened:
                     break
                 
+        self.x_speed *= 0.9
+        
         for trigger in self.level.triggers:
-            if self.test_player(self.player, trigger, False):
-                
+            if test_player(self.player, trigger, False):
                 if time() - trigger.last_press > 0.5:
                     trigger.func()
                     trigger.last_press = time()
                 if trigger.touch_disable:
-                    self.canvas.delete(trigger.tag)
+                    self.canvas.itemconfigure(trigger.tag, state = 'hidden')
                     self.disabled_tags.append(trigger.tag)
-                
-        self.x_speed *= 0.9
         
         if test_player(self.player, self.level.goal, False):
             self.playing = False
@@ -530,6 +551,7 @@ class Game:
         self.disabled_tags = []
         self.canvas.delete('level')
         self.presses = 0
+        self.gravity = 1
         
         def positions(elem):
             return (elem[0], elem[1], elem[0] + elem[2], elem[1] + elem[3])
@@ -592,6 +614,7 @@ class Game:
                 objinfo = self.level.goal
                 obj = self.level.goal
             else:
+                
                 for test in self.level.blocks:
                     if test.tag == tag:
                         touch = True
@@ -611,6 +634,11 @@ class Game:
                 for test in self.level.triggers:
                     if test.tag == tag:
                         objinfo = (self.level.triggers.index(test), 'triggers')
+                        obj = test
+                        
+                for test in self.level.flippers:
+                    if test.tag == tag:
+                        objinfo = (self.level.flippers.index(test), 'flippers')
                         obj = test
                 
             if objinfo == 'none':
@@ -633,6 +661,8 @@ class Game:
                                 self.level.spikes[objinfo[0]].dimensions[0] += x
                             case 'triggers':
                                 self.level.triggers[objinfo[0]].dimensions[0] += x
+                            case 'flippers':
+                                self.level.flippers[objinfo[0]].dimensions[0] += x
                     else:
                         self.level.goal.dimensions[0] += x
                     if touch:
@@ -655,6 +685,8 @@ class Game:
                                 self.level.spikes[objinfo[0]].dimensions[1] += y
                             case 'triggers':
                                 self.level.triggers[objinfo[0]].dimensions[1] += y
+                            case 'flippers':
+                                self.level.flippers[objinfo[0]].dimensions[1] += y
                     else:
                         self.level.goal.dimensions[1] += y
                     if touch:
@@ -675,38 +707,33 @@ class Game:
             trigger.dimensions = [self.proportion(coord) for coord in trigger.dimensions]
             
             sprite = self.round_rectangle(*positions(trigger.dimensions), fill = trigger.color[0], tag = (trigger.tag, 'level'), radius = 5)
-            self.canvas.delete('pad')
             trig = self.level.triggers[index]
-            def callbacks(index = index, sprite = sprite, p = True):
+            def callbacks(index = index, sprite = sprite):
                 trig = self.level.triggers[index]
-                if p:
-                    print('a')
-                    print(trig.enabled)
-                    print('')
                 if not self.playing:
                     return
                 if trig.enabled:
                     self.level.triggers[index].enabled = False
                     col = trigger.color[1]
-                    self.canvas.itemconfig(sprite, fill = col, outline = deluminance(col))
-                    self.canvas.itemconfig(trig.disable_tag, state = 'hidden')
-                    
+                    self.canvas.itemconfigure(sprite, fill = col, outline = deluminance(col))
+                    self.canvas.itemconfigure(trig.disable_tag, state = 'hidden')
                     self.disabled_tags.append(trig.disable_tag)
                 else:
                     self.level.triggers[index].enabled = True
                     col = trigger.color[0]
-                    self.canvas.itemconfig(sprite, fill = col, outline = deluminance(col))
-                    self.canvas.itemconfig(trig.disable_tag, state = 'normal')
+                    self.canvas.itemconfigure(sprite, fill = col, outline = deluminance(col))
+                    self.canvas.itemconfigure(trig.disable_tag, state = 'normal')
                     if trig.disable_tag in self.disabled_tags:
                         self.disabled_tags.remove(trig.disable_tag)
                         
-            callbacks(p  =False)
-            callbacks(p = False)
+            callbacks()
+            callbacks()
                     
             trig.func = callbacks
         
         x, y, width, height = draw_lvl.goal.dimensions
-        self.round_rectangle(x, y, x + width, y + height, fill = draw_lvl.goal.color, tag = ('level', 'goal'), radius = 5)
+        self.goal_img = ImageTk.PhotoImage(Image.open('goalflag.png').resize((width, height), resample = Image.LANCZOS))
+        self.canvas.create_image(x, y, image = self.goal_img, tag = ('level', 'goal'), anchor = tk.NW)
         
     #https://stackoverflow.com/questions/44099594/how-to-make-a-tkinter-canvas-rectangle-with-rounded-corners
     def round_rectangle(self, x1, y1, x2, y2, radius=25, **kwargs):
