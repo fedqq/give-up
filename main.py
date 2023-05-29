@@ -169,15 +169,77 @@ class Game:
         self.current_level = 0
         
         self.size = (self.root.winfo_screenheight() / 10) * 9
+        
+        fnt = 'Segoe UI'
+        
+        self.huge_font = (fnt, 45)
+        self.big_font = (fnt, 35)
+        self.small_font = (fnt, 25)
+        self.medium_font = (fnt, 20)
+        self.mini_font = (fnt, 17)
+        self.super_mini_font = (fnt, 14)
          
         self.canvas = tk.Canvas(self.root, width = self.size, height = self.size, bg = '#1f1f1f')
         self.canvas.create_window(0, 0, width = self.size, height = self.size, anchor = 'nw')
         self.canvas.update_idletasks()
-        self.canvas.pack()
+        self.canvas.pack(side = BOTTOM, pady = 10, padx = 10)
         
         self.cwidth, self.cheight = self.canvas.winfo_reqwidth(), self.canvas.winfo_reqheight()
         
-        self.goal_img = tk.PhotoImage(file = 'goalflag.png')        
+        self.goal_img = tk.PhotoImage(file = 'goalflag.png') 
+        
+        self.root.update_idletasks()
+        
+        taskbar = ttk.Frame(self.root, width = self.root.winfo_width())
+        taskbar.pack(side = TOP, expand = True, fill = tk.BOTH, padx = 10, pady = 10)
+        
+        self.get_exit_btn(taskbar, self.root.destroy, style = 'SuperMini', width = 3).pack(side = RIGHT, padx = 10, pady = 5)
+        ttk.Button(taskbar, text = '⚙', command = self.show_settings, style = 'SuperMini.Accent.TButton', width = 3).pack(side = RIGHT, padx = 10, pady = 5)
+        ttk.Label(taskbar, text = 'Platformer', font = self.small_font).pack(side = LEFT, padx = 10)
+        
+        self.root.update_idletasks()
+        
+        width = self.root.winfo_width()
+        middle = int(self.root.winfo_screenwidth() / 2 - width / 2)
+        
+        self.root.overrideredirect(True)
+        self.root.geometry(f'+{middle}+10')
+        
+        def get_pos(event):
+            #These two from: https://stackoverflow.com/questions/23836000/can-i-change-the-title-bar-in-tkinter
+            window_x = self.root.winfo_x()
+            window_y = self.root.winfo_y()
+            click_x = event.x_root
+            click_y = event.y_root
+
+            self.relative_x = window_x - click_x
+            self.relative_y = window_y - click_y
+        
+        def move_window(event):
+            self.root.geometry(f'+{event.x_root + self.relative_x}+{event.y_root + self.relative_y}')
+           
+        def set_appwindow(root):
+            #Code taken from https://stackoverflow.com/questions/30786337/tkinter-windows-how-to-view-window-in-windows-task-bar-which-has-no-title-bar
+            #Necessary for better taskbar, full of windows jargon and complicated stuff I don't understand
+            GWL_EXSTYLE = -20
+            WS_EX_APPWINDOW = 0x00040000
+            WS_EX_TOOLWINDOW = 0x00000080
+            hwnd = windll.user32.GetParent(root.winfo_id())
+            style = windll.user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
+            style = style & ~WS_EX_TOOLWINDOW
+            style = style | WS_EX_APPWINDOW
+            windll.user32.SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style)
+            root.withdraw()
+            def a():
+                root.deiconify()
+                root.grab_set()
+                root.grab_release()
+            root.after(110, a)
+            
+        taskbar.bind('<B1-Motion>',  move_window)
+        taskbar.bind('<Button-1>',   get_pos)
+        
+        self.root.after(1, set_appwindow, self.root)       
         
         self.reset_levels()
         
@@ -189,13 +251,6 @@ class Game:
         
         sv_ttk.use_dark_theme()
         
-        fnt = 'Segoe UI'
-        self.huge_font = (fnt, self.proportion(45))
-        self.big_font = (fnt, self.proportion(35))
-        self.small_font = (fnt, self.proportion(25))
-        self.medium_font = (fnt, self.proportion(20))
-        self.mini_font = (fnt, self.proportion(17))
-        
         try:
             self.last_image = tk.PhotoImage(file = 'last.png')
         except tk.TclError:
@@ -205,8 +260,6 @@ class Game:
         
         start_btn = ttk.Button(self.canvas, text = 'Start Game', command = start, style = 'Big.Accent.TButton')
         start_btn.place(relx=0.5, rely=0.5, anchor = CENTER)
-        
-        ttk.Button(self.root, text = 'Settings', command = self.show_settings).pack()
         
         self.canvas.create_text(self.cwidth / 2, self.cheight / 5, text = 'Platformer', font = self.huge_font, tag = 'start', anchor = tk.CENTER, fill = 'white')
         
@@ -223,17 +276,13 @@ class Game:
         
         style = ttk.Style(self.root)
         style.theme_use('sun-valley-dark')
-        style.configure('Transparent.TFrame', background = '')
         style.configure('Huge.Accent.TButton', font = self.huge_font)
         style.configure('Big.Accent.TButton', font = self.big_font)
         style.configure('Small.Accent.TButton', font = self.small_font)
         style.configure('Mini.Accent.TButton', font = self.mini_font)
-        
-        self.root.update_idletasks()
-        width, height = self.root.winfo_width(), self.root.winfo_height()
-        rwidth = int(self.root.winfo_screenwidth() / 2 - width / 2)
-        self.root.geometry(f'{width}x{height}+{rwidth}+10')
-        
+        style.configure('SuperMini.Accent.TButton', font = self.super_mini_font)
+        style.configure('Button.TCheckbutton', font = self.super_mini_font)
+
         self.root.mainloop()
         
     def show_settings(self):
@@ -248,18 +297,19 @@ class Game:
                 self.coin_records = [0 for _ in range(len(self.levels))]
                 self.unlocked = 0
         
-        change_var = tk.BooleanVar(value = self.color_changing) 
-        def switch_changing():
-            self.color_changing = change_var.get()
+        col_var = tk.BooleanVar(value = self.color_changing) 
+        def checkbtn():
+            self.color_changing = col_var.get()
         
-        toplvl = tk.Toplevel(self.root, width = self.cwidth / 2, height = self.cheight / 2)
+        toplvl = tk.Toplevel(self.root, width = self.cwidth / 3, height = self.cheight / 3)
         toplvl.resizable(False, False)
         toplvl.grab_set()
         toplvl.title('Settings')
+        ttk.Label(toplvl, text = 'Game Options', font = self.small_font, justify = CENTER).place(relx = 0.5, rely = 0.1, anchor = tk.CENTER)
         clearbtn = ttk.Button(toplvl, text = 'Clear Save Data', style = 'Mini.Accent.TButton', command = clear_data, width = 16)
-        clearbtn.place(relx = 0.5, rely = 0.2, anchor = tk.CENTER)
-        gradient_check = ttk.Checkbutton(toplvl, text = 'Player Color Changing', command = switch_changing, variable = change_var)
-        gradient_check.place(relx = 0.5, rely = 0.7, anchor = tk.CENTER)
+        clearbtn.place(relx = 0.5, rely = 0.6, anchor = tk.CENTER)
+        gradient_check = ttk.Checkbutton(toplvl, text = 'Player Color Gradient', command = checkbtn, variable = col_var, style = 'Button.TCheckbutton')
+        gradient_check.place(relx = 0.5, rely = 0.8, anchor = tk.CENTER)
         
     def press_key(self, key):
         if not self.playing:
@@ -318,7 +368,7 @@ class Game:
     def show_select_menu(self):
         self.canvas.delete('level')
         frame = ttk.Frame(self.canvas, style = 'Transparent.TFrame')
-        title = ttk.Label(self.canvas, text = 'Select Level', font = self.big_font)
+        self.canvas.create_text(self.canvas.winfo_width() / 2, self.canvas.winfo_height() / 10, text = 'Select A Level', font = self.big_font, anchor = tk.CENTER, tag = 'text', fill = 'white')
         
         for col in range(3):
             frame.columnconfigure(col, weight = 1)
@@ -327,6 +377,7 @@ class Game:
             
         self.last_image = tk.PhotoImage(file = 'last.png')
         self.canvas.create_image(0, 0, anchor = tk.NW, image = self.last_image, tag = 'img')
+        self.canvas.tag_raise('text')
         self.smaller_img = tk.PhotoImage(file = 'smaller.png')
         self.small_img_lbl = ttk.Label(frame, image = self.smaller_img).place(x = 0, y = 0)
             
@@ -347,9 +398,8 @@ class Game:
                 ttk.Button(window, text = 'Close', command = window.destroy, style = 'Small.Accent.TButton').place(relx = 0.5, rely = 0.8, anchor = CENTER)
                 
             def open_level(index = index):
-                exitbtn.destroy()
                 frame.destroy()
-                title.destroy()
+                self.canvas.delete('text')
                 self.current_level = index  
                 self.playing = True
                 self.load_lvl(self.levels[index])
@@ -364,21 +414,28 @@ class Game:
             infobtn = ttk.Button(frame, text = 'Info', style = 'Mini.Accent.TButton', state = state, width = 4, command = show_info)
             infobtn.grid(column = x, row = y, sticky = tk.NE)
             
-        exitbtn = self.get_exit_btn(self.root)
-        exitbtn.place(relx = 0.01, rely = 0.01, anchor = tk.NW)
         
-        title.place(relx = 0.5, rely = 0.1, anchor = tk.CENTER)
         frame.place(relx = 0.5, rely = 0.7, anchor = tk.CENTER, relwidth = 0.9, relheight = 0.9)
         
-    def get_exit_btn(self, master, cmd = None):
+    def get_exit_btn(self, master, cmd = None, style = 'Mini', width = 2):
         if cmd == None:
             cmd = self.root.destroy
-        return ttk.Button(master, text = 'X', style = 'Mini.Accent.TButton', command = cmd, width = 2)
+        return ttk.Button(master, text = 'X', style = f'{style}.Accent.TButton', command = cmd, width = width)
             
     def reset_levels(self):
         self.levels = [Level() for _ in range(0, 6)]
         
         self.levels[0]\
+            .add_spikes(0, 300, 1000, 50, 'bigspikes')\
+            .add_block(640, 390, 360, 50)\
+            .add_trigger(520, 100, 0, 0, 'bigspikes', enabled = True, color = default_colors[TRIGGERFLIP])\
+            .add_block(0, 700, 200, 50)\
+            .add_block(400, 900, 200, 50, 'moveblock')\
+            .add_movement((4, 0), reps = 20, delay = 30, tag = 'moveblock')\
+            .add_spikes(300, 600, 700, 90)\
+            .add_ground_spikes()
+        
+        self.levels[1]\
             .add_block(220, 0, 70, 700)\
             .add_block(85, 350, 135, 50)\
             .add_block(0, 550, 135, 50)\
@@ -392,16 +449,6 @@ class Game:
             .add_block(830, 420, 170, 50)\
             .set_goal(950, 470, 50, 50)\
             .add_spikes(360, 400, 200, 50)
-            
-        self.levels[1]\
-            .add_spikes(0, 300, 1000, 50, 'bigspikes')\
-            .add_block(640, 390, 360, 50)\
-            .add_trigger(520, 100, 0, 0, 'bigspikes', enabled = True, color = default_colors[TRIGGERFLIP])\
-            .add_block(0, 700, 200, 50)\
-            .add_block(400, 900, 200, 50, 'moveblock')\
-            .add_movement((4, 0), reps = 20, delay = 30, tag = 'moveblock')\
-            .add_spikes(300, 600, 700, 90)\
-            .add_ground_spikes()
         
         self.levels[2]\
             .add_block(100, 700, 100, 50, 'test')\
@@ -466,7 +513,6 @@ class Game:
         def delete():
             self.canvas.delete('all')
             restartbtn.destroy()
-            exitbtn.destroy()
             selectbtn.destroy()
         
         def restart():
@@ -489,9 +535,6 @@ class Game:
         
         restartbtn = ttk.Button(self.canvas, text = 'Restart', style = 'Small.Accent.TButton', command = restart, width = 16)
         restartbtn.place(relx = 0.5, rely = 0.5, anchor = CENTER)
-        
-        exitbtn = self.get_exit_btn(self.root)
-        exitbtn.place(relx = 0.01, rely = 0.01)
         
         selectbtn = ttk.Button(self.canvas, text = 'Level Select Menu', style = 'Small.Accent.TButton', command = show_select, width = 16)
         selectbtn.place(relx = 0.5, rely = 0.6, anchor = CENTER)
@@ -696,7 +739,6 @@ class Game:
             nextbtn.destroy()
             selbtn.destroy()
             restartbtn.destroy()
-            exitbtn.destroy()
         
         def go_next():
             callback()
@@ -755,9 +797,6 @@ class Game:
         restartbtn = ttk.Button(self.canvas, text = 'Restart', style = 'Small.Accent.TButton', command = restart, width = 15)
         restartbtn.place(relx = 0.5, rely = 0.7, anchor = CENTER)
         
-        exitbtn = self.get_exit_btn(self.canvas)
-        exitbtn.place(relx = 0.01, rely = 0.01)
-        
     def pause(self):
         if not self.playing:
             return
@@ -765,7 +804,6 @@ class Game:
         def callback():
             self.canvas.delete('all')
             restartbtn.destroy()
-            exitbtn.destroy()
             selbtn.destroy()
             resbtn.destroy()
             
@@ -785,7 +823,6 @@ class Game:
             self.playing = True
             self.canvas.delete('img')
             restartbtn.destroy()
-            exitbtn.destroy()
             selbtn.destroy()
             resbtn.destroy()
         
@@ -799,8 +836,6 @@ class Game:
         resbtn.place(relx = 0.5, rely = 0.5, anchor = CENTER)
         restartbtn = ttk.Button(self.canvas, text = 'Restart', style = 'Small.Accent.TButton', command = restart, width = 15)
         restartbtn.place(relx = 0.5, rely = 0.7, anchor = CENTER)
-        exitbtn = ttk.Button(self.canvas, text = 'Exit', style = 'Small.Accent.TButton', command = self.root.destroy, width = 15)
-        exitbtn.place(relx = 0.5, rely = 0.8, anchor = CENTER)
         
     def load_lvl(self, lvl: Level):
         self.afters = {}
