@@ -40,7 +40,7 @@ class LevelElement:
             if len(self.dimensions) < 4:
                 self.dimensions.append(PLAYER_SIZE)
                 self.dimensions.append(PLAYER_SIZE)
-            self.color = default_colors[type]
+            self.color = kwargs['color']
         
         if type == MOVEMENT:
             self.reps = kwargs['reps']
@@ -61,7 +61,7 @@ class LevelElement:
 
 class Level:
     def __init__(self) -> None:
-        self.blocks =   [LevelElement(BLOCK, 0, 160, 150, 50, tag = 'none', touchdisable = False)]
+        self.blocks =   [LevelElement(BLOCK, 10, 160, 140, 50, tag = 'none', touchdisable = False)]
         elemlist    = list[LevelElement]
         
         self.spikes:    elemlist = []
@@ -132,6 +132,7 @@ class Level:
             width = PLAYER_SIZE
         if height == 0:
             height = PLAYER_SIZE
+        
         self.triggers.append(LevelElement(TRIGGER, x, y, width, height, \
                             disabletag = disabletag, \
                             color = color, \
@@ -168,9 +169,9 @@ class Game:
         self.color_changing = True
         self.current_level = 0
         
-        self.size = (self.root.winfo_screenheight() / 10) * 9
+        self.size = (self.root.winfo_screenheight() / 10) * 8
         
-        fnt = 'Segoe UI'
+        fnt = 'Segoe UI Variable'
         
         self.huge_font = (fnt, 45)
         self.big_font = (fnt, 35)
@@ -195,7 +196,7 @@ class Game:
         
         self.get_exit_btn(taskbar, self.root.destroy, style = 'SuperMini', width = 3).pack(side = RIGHT, padx = 10, pady = 5)
         ttk.Button(taskbar, text = '⚙', command = self.show_settings, style = 'SuperMini.Accent.TButton', width = 3).pack(side = RIGHT, padx = 10, pady = 5)
-        ttk.Label(taskbar, text = 'Platformer', font = self.small_font).pack(side = LEFT, padx = 10)
+        ttk.Label(taskbar, text = 'Platformer', font = self.small_font).pack(side = LEFT, padx = 10, pady = 10)
         
         self.root.update_idletasks()
         
@@ -263,15 +264,21 @@ class Game:
         
         self.canvas.create_text(self.cwidth / 2, self.cheight / 5, text = 'Platformer', font = self.huge_font, tag = 'start', anchor = tk.CENTER, fill = 'white')
         
-        self.root.bind('<space>', func(self.press_key, TOP))
         self.root.bind('<Escape>', func(self.pause))
-        self.root.bind('<Up>', func(self.press_key, TOP))
+        self.root.bind('<space>', func(self.press_key, TOP))
         self.root.bind('<KeyRelease-space>', func(self.release_key, TOP))
+        self.root.bind('<Up>', func(self.press_key, TOP))
         self.root.bind('<KeyRelease-Up>', func(self.release_key, TOP))
+        self.root.bind('w', func(self.press_key, TOP))
+        self.root.bind('<KeyRelease-w>', func(self.release_key, TOP))
         self.root.bind('<Right>', func(self.press_key, RIGHT))
         self.root.bind('<Left>', func(self.press_key, LEFT))
         self.root.bind('<KeyRelease-Right>', func(self.release_key, RIGHT))
         self.root.bind('<KeyRelease-Left>', func(self.release_key, LEFT))
+        self.root.bind('d', func(self.press_key, RIGHT))
+        self.root.bind('a', func(self.press_key, LEFT))
+        self.root.bind('<KeyRelease-d>', func(self.release_key, RIGHT))
+        self.root.bind('<KeyRelease-a>', func(self.release_key, LEFT))
         self.root.bind('<Destroy>', func(self.save_data))
         
         style = ttk.Style(self.root)
@@ -335,7 +342,7 @@ class Game:
         self.root.after(4, self.check_keys)
         
     def move_y(self):
-        if self.jumps != 0:
+        if self.jumps > 0:
             self.pressed[TOP] = False
             self.y_speed = -16 * self.gravity
             self.jumps -= 1
@@ -368,7 +375,7 @@ class Game:
     def show_select_menu(self):
         self.canvas.delete('level')
         frame = ttk.Frame(self.canvas, style = 'Transparent.TFrame')
-        self.canvas.create_text(self.canvas.winfo_width() / 2, self.canvas.winfo_height() / 10, text = 'Select A Level', font = self.big_font, anchor = tk.CENTER, tag = 'text', fill = 'white')
+        self.canvas.create_text(self.canvas.winfo_width() / 2, self.canvas.winfo_height() / 10, text = 'Select a level', font = self.big_font, anchor = tk.CENTER, tag = 'text', fill = 'white')
         
         for col in range(3):
             frame.columnconfigure(col, weight = 1)
@@ -428,26 +435,28 @@ class Game:
         self.levels[0]\
             .add_spikes(0, 300, 1000, 50, 'bigspikes')\
             .add_block(640, 390, 360, 50)\
-            .add_trigger(520, 100, 0, 0, 'bigspikes', enabled = True, color = default_colors[TRIGGERFLIP])\
+            .add_trigger(520, 100, 0, 0, 'bigspikes', enabled = True)\
             .add_block(0, 700, 200, 50)\
             .add_block(400, 900, 200, 50, 'moveblock')\
             .add_movement((4, 0), reps = 20, delay = 30, tag = 'moveblock')\
             .add_spikes(300, 600, 700, 90)\
-            .add_ground_spikes()
+            .add_ground_spikes()\
+            .add_coin(990 - PLAYER_SIZE, 100, 'coin1')
         
+        self.levels[1].blocks[0].dimensions[2] -= 20
         self.levels[1]\
-            .add_block(220, 0, 70, 700)\
-            .add_block(85, 350, 135, 50)\
-            .add_block(0, 550, 135, 50)\
-            .add_spikes(150, 160, 70, 50, 'spikes1')\
+            .add_block(220, 10, 70, 690)\
+            .add_block(85, 350, 125, 50)\
+            .add_block(10, 550, 125, 50)\
+            .add_spikes(140, 160, 70, 50, 'spikes1')\
             .add_time_toggle('spikes1', 1000)\
             .add_ground_spikes()\
-            .add_block(0, 900, 135, 50)\
+            .add_block(10, 890, 125, 50)\
             .add_flipper(250, 800, 0, 0)\
             .add_coin(560, 285, 'coin1')\
             .add_pad(730, 200, 0, 0)\
-            .add_block(830, 420, 170, 50)\
-            .set_goal(950, 470, 50, 50)\
+            .add_block(830, 10, 160, 460)\
+            .set_goal(900, 470, 50, 50)\
             .add_spikes(360, 400, 200, 50)
         
         self.levels[2]\
@@ -455,8 +464,8 @@ class Game:
             .add_block(220, 0, 70, 500)\
             .add_block(600, 400, 200, 50)\
             .add_block(855, 199, 200, 50, 'block')\
-            .add_trigger(180, 10, 0, 0, 'test', enabled = True, color = default_colors[TRIGGERFLIP])\
-            .add_trigger(10, 450, 0, 0, 'pad', enabled = True, color = default_colors[TRIGGERFLIP])\
+            .add_trigger(180, 10, 0, 0, 'test', color = default_colors[TRIGGERFLIP])\
+            .add_trigger(10, 450, 0, 0, 'pad', color = default_colors[TRIGGERFLIP])\
             .set_goal(960, 10, 30, 30)\
             .add_pad(400, 830, 50, 50, tag = 'pad', jheight = -35)\
             .add_movement((1, 0), tag = 'test', delay = 40, reps = 30)\
@@ -466,22 +475,76 @@ class Game:
         
         self.levels[3].blocks = []
         self.levels[3]\
-            .add_spikes(0, 50, 150, 50, tag = 'spikes1')\
-            .add_trigger(5, 5, 0, 0, disabletag = 'downblocker', enabled = True, color = ('green', 'red'))\
-            .add_block(0, 160, 750, 75)\
-            .add_spikes(440, 0, 50, 160, tag = 'blockspikes')\
+            .add_spikes(10, 50, 140, 50, tag = 'spikes1')\
+            .add_trigger(5, 5, 0, 0, disabletag = 'downblocker', enabled = True)\
+            .add_block(10, 160, 740, 75)\
+            .add_spikes(430, 10, 50, 140, tag = 'blockspikes')\
             .add_time_toggle('blockspikes', 900)\
-            .add_spikes(750, 160, 250, 75, 'downblocker')\
-            .add_trigger(650, 5, 0, 0, 'spikes1', enabled = True, color = default_colors[TRIGGERFLIP])\
+            .add_spikes(760, 160, 230, 75, 'downblocker')\
+            .add_trigger(650, 5, 0, 0, 'spikes1', enabled = True)\
             .add_flipper(950, 400, 0, 0)\
             .add_spikes(300, 350, 500, 100)\
             .add_flipper(155, 400, 0, 0)\
-            .add_block(0, 640, 250, 100)\
-            .add_spikes(250, 640, 350, 100)\
-            .add_block(600, 640, 200, 100)\
+            .add_block(10, 640, 240, 100)\
+            .add_spikes(260, 640, 330, 100)\
+            .add_block(600, 640, 190, 100)\
             .add_ground_spikes()\
-            .add_block(700, 900, 75, 75)\
+            .add_block(700, 865, 75, 75)\
             .set_goal(340, 900, 0, 0)
+        
+        self.levels[4].blocks = []
+        self.levels[4]\
+            .add_block(10, 160, 140, 100)\
+            .add_spikes(160, 160, 300, 40)\
+            .add_block(470, 160, 250, 40)\
+            .add_spikes(730, 160, 250, 40, 'downblock')\
+            .add_time_toggle('downblock', 1200)\
+            .add_block(160, 210, 700, 50)\
+            .add_block(160, 460, 820, 75)\
+            .add_spikes(800, 340, 50, 110)\
+            .add_flipper(810, 270, 0, 0, 'one', touchdisable = True, disabledelay = 100)\
+            .add_spikes(600, 270, 50, 110)\
+            .add_flipper(610, 420, 0, 0, 'two', touchdisable = True, disabledelay = 100)\
+            .add_spikes(400, 340, 50, 110)\
+            .add_flipper(410, 270, 0, 0, 'thr', touchdisable = True, disabledelay = 100)\
+            .add_spikes(200, 270, 50, 110)\
+            .add_flipper(210, 420, 0, 0, 'fou', touchdisable = True, disabledelay = 100)\
+            .add_ground_spikes()\
+            .add_block(10, 865, 200, 75)\
+            .add_spikes(220, 700, 75, 240)\
+            .add_block(305, 865, 200, 75)\
+            .add_spikes(515, 700, 75, 240)\
+            .add_block(600, 865, 200, 75)\
+            .add_spikes(810, 700, 75, 240)\
+            .set_goal(945, 560, 0, 0)
+            
+        self.levels[5]\
+            .add_block(160, 160, 50, 630)\
+            .add_block(160, 800, 50, 200, 'block')\
+            .add_block(460, 10, 50, 830)\
+            .add_spikes(220, 220, 110, 50)\
+            .add_spikes(340, 370, 110, 50)\
+            .add_spikes(220, 620, 110, 50)\
+            .add_spikes(430, 940, 50, 50)\
+            .add_spikes(750, 880, 240, 110)\
+            .add_block(810, 820, 180, 50)\
+            .add_spikes(750, 650, 50, 220, 'balls')\
+            .add_time_toggle('balls', 1000)\
+            .add_spikes(810, 650, 50, 50)\
+            .add_spikes(940, 650, 50, 50)\
+            .add_block(940, 590, 50, 50)\
+            .add_pad(650, 470, 0, 0)\
+            .add_block(755, 190, 235, 50)\
+            .add_trigger(845, 10, 0, 0, 'block', enabled = True)\
+            .add_block(0, 0, 0, 0)\
+            .add_flipper(10, 990 - PLAYER_SIZE, 0, 0)\
+            .add_block(120, 750, 30, 40)\
+            .add_block(10, 550, 30, 40)\
+            .add_block(120, 350, 30, 40)\
+            .add_spikes(10, 750, 30, 40)\
+            .add_spikes(120, 550, 30, 40)\
+            .add_spikes(10, 350, 30, 40)\
+            .set_goal(10, 220, 0, 0)
             
         self.unlocked = len([0 for a in self.levels if a.unlocked])
         
@@ -629,8 +692,9 @@ class Game:
                     self.player[1] += move
                     failed = True
                     if self.y_speed * self.gravity >= 0:
-                        self.grounded = True
-                        self.jumps = 2
+                        if move * self.gravity < 0:
+                            self.grounded = True
+                            self.jumps = 2
                         
                     self.y_speed = self.gravity
                         
@@ -1027,8 +1091,8 @@ class Game:
                     if trig.disable_tag in self.disabled_tags:
                         self.disabled_tags.remove(trig.disable_tag)
                         
-            callbacks()
-            callbacks()
+            callbacks(index, sprite)
+            callbacks(index, sprite)
                     
             trig.func = callbacks
         
