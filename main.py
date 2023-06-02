@@ -17,6 +17,7 @@ import colorsys
 PLAYER_SIZE = 30
 DEBUG = True
 TRANSPARENT = '#ab23ff'
+DEFAULT_DELAY = 1500
 
 BLOCK, PAD, MOVEMENT, SPIKES, TOGGLE, GOAL, TRIGGER, TRIGGERFLIP, FLIPPER, COIN = 'block', 'pad', 'movement', 'spikes', 'toggle', 'goal', 'trigger', 'triggerflip', 'flipper', 'coin'
 
@@ -79,7 +80,7 @@ class Level:
     def unlock(self):
         self.unlocked = True
         
-    def add_block(self, x, y, width, height, tag = 'none', color = default_colors[BLOCK], touchdisable = False, disabledelay = 2000):
+    def add_block(self, x, y, width, height, tag = 'none', color = default_colors[BLOCK], touchdisable = False, disabledelay = DEFAULT_DELAY):
         self.blocks.append(LevelElement(BLOCK, x, y, width, height, tag = tag, color = color, touchdisable = touchdisable, disabledelay = disabledelay))
         return self
     
@@ -98,7 +99,7 @@ class Level:
         self.spikes.append(LevelElement(SPIKES, x, y, width, height, tag = tag, color = color))
         return self
     
-    def add_pad(self, x, y, width, height, jheight = -25, tag = 'none', color = default_colors[PAD], touchdisable = False, disabledelay = 2000):
+    def add_pad(self, x, y, width, height, jheight = -25, tag = 'none', color = default_colors[PAD], touchdisable = False, disabledelay = DEFAULT_DELAY):
         if width == 0:
             width = PLAYER_SIZE
         if height == 0:
@@ -127,7 +128,7 @@ class Level:
         self.coins.append(LevelElement(COIN, x, y, tag = tag))
         return self
     
-    def add_trigger(self, x, y, width, height, disabletag, color = default_colors[TRIGGER], tag = 'none', enabled = False, touchdisable = False, disabledelay = 2000):
+    def add_trigger(self, x, y, width, height, disabletag, color = default_colors[TRIGGER], tag = 'none', enabled = False, touchdisable = False, disabledelay = DEFAULT_DELAY):
         if width == 0:
             width = PLAYER_SIZE
         if height == 0:
@@ -146,7 +147,7 @@ class Level:
         self.add_spikes(0, 950, 1000, 50, color = color, tag = tag)
         return self
     
-    def add_flipper(self, x, y, width, height, tag = 'none', color = default_colors[FLIPPER], touchdisable = False, disabledelay = 2000):
+    def add_flipper(self, x, y, width, height, tag = 'none', color = default_colors[FLIPPER], touchdisable = False, disabledelay = DEFAULT_DELAY):
         if width == 0:
             width = PLAYER_SIZE
         if height == 0:
@@ -171,7 +172,7 @@ class Game:
         
         self.size = (self.root.winfo_screenheight() / 10) * 8
         
-        fnt = 'Segoe UI Variable'
+        fnt = 'Segoe UI Light'
         
         self.huge_font = (fnt, 45)
         self.big_font = (fnt, 35)
@@ -434,8 +435,8 @@ class Game:
         
         self.levels[0]\
             .add_spikes(0, 300, 1000, 50, 'bigspikes')\
-            .add_block(640, 390, 360, 50)\
-            .add_trigger(520, 100, 0, 0, 'bigspikes', enabled = True)\
+            .add_block(640, 390, 350, 50, 'bl', touchdisable = True)\
+            .add_trigger(520, 100, 0, 0, 'bigspikes', enabled = True, touchdisable = True, tag = 'trig')\
             .add_block(0, 700, 200, 50)\
             .add_block(400, 900, 200, 50, 'moveblock')\
             .add_movement((4, 0), reps = 20, delay = 30, tag = 'moveblock')\
@@ -528,8 +529,8 @@ class Game:
             .add_spikes(430, 940, 50, 50)\
             .add_spikes(750, 880, 240, 110)\
             .add_block(810, 820, 180, 50)\
-            .add_spikes(750, 650, 50, 220, 'balls')\
-            .add_time_toggle('balls', 1000)\
+            .add_spikes(750, 650, 50, 220, 'spikes')\
+            .add_time_toggle('spikes', 1000)\
             .add_spikes(810, 650, 50, 50)\
             .add_spikes(940, 650, 50, 50)\
             .add_block(940, 590, 50, 50)\
@@ -671,9 +672,27 @@ class Game:
                 if time() - flipper.last_press > 0.5:
                     self.gravity *= -1
                     flipper.last_press = time()
-                if flipper.touch_disable:
-                    self.canvas.itemconfigure(flipper.tag, state = 'hidden')
-                    self.disabled_tags.append(flipper.tag)
+                    if flipper.touch_disable:
+                        STEPSIZE = 10
+                        id = f'{flipper.tag}+{flipper.disable_delay}disable'
+                        base_color = flipper.color
+                        print(fade_to_bg(base_color, 0.3))
+                        steps = flipper.disable_delay / STEPSIZE
+                        gradient = Color(base_color).range_to(fade_to_bg(base_color, 0.1), int(steps))
+                        grad_list = copy([a for a in gradient])
+                        
+                        def disable(flipper = flipper, id = id, grad_list = grad_list, index = 0):
+                            try:
+                                col = grad_list[index]
+                            except IndexError:
+                                del self.afters[id]
+                                self.disabled_tags.append(flipper.tag)
+                            else:
+                                self.canvas.itemconfigure(flipper.tag, fill = col.get_hex(), outline = deluminance(col.get_hex()))
+                                self.afters[id] = self.root.after(STEPSIZE, disable, flipper, id, grad_list, index + 1)
+                            
+                        if not id in self.afters:
+                            self.afters[id] = self.root.after(STEPSIZE, disable)
                     
         for coin in self.level.coins:
             if self.test_player(coin):
@@ -688,6 +707,9 @@ class Game:
             self.player[1] += self.y_speed
             failed = False
             for block in self.level.blocks:
+                test = False
+                if self.test_player(block):
+                    test = True
                 while self.test_player(block, True):
                     self.player[1] += move
                     failed = True
@@ -695,25 +717,29 @@ class Game:
                         if move * self.gravity < 0:
                             self.grounded = True
                             self.jumps = 2
-                        
                     self.y_speed = self.gravity
                         
                 if failed:
-                    self.player[1] -= 3
-                    test = self.test_player(block)
-                    self.player[1] += 3
-                    
+                    STEPSIZE = 10
                     if block.touch_disable and test:
                         id = f'{block.tag}+{block.disable_delay}disable'
+                        base_color = self.canvas.itemcget(block.tag, 'fill')
+                        steps = block.disable_delay / STEPSIZE
+                        gradient = Color(base_color).range_to(fade_to_bg(base_color, 0.3), int(steps))
+                        grad_list = [a for a in gradient]
                         
-                        def disable(block = block, id = id):
-                            self.canvas.itemconfigure(block.tag, state = 'hidden')
-                            self.disabled_tags.append(block.tag)
-                            if id in self.afters:
+                        def disable(block = block, id = id, grad_list = grad_list, index = 0):
+                            try:
+                                col = grad_list[index]
+                            except IndexError: 
                                 del self.afters[id]
-                                
+                                self.disabled_tags.append(block.tag)
+                            else:
+                                self.canvas.itemconfigure(block.tag, fill = col.get_hex(), outline = deluminance(col.get_hex()))
+                                self.afters[id] = self.root.after(STEPSIZE, disable, block, id, grad_list, index + 1)
+                            
                         if not id in self.afters:
-                            self.afters[id] = self.root.after(block.disable_delay, disable)
+                            self.afters[id] = self.root.after(STEPSIZE, disable)
                             
                     break
                 
@@ -730,15 +756,7 @@ class Game:
                 happened = False
                 count = 0
                 while self.test_player(block, True):
-                    if block.touch_disable:
-                        def disable(block = block):
-                            self.canvas.itemconfigure(block.tag, state = 'hidden')
-                            self.disabled_tags.append(block.tag)
-                            id = f'{block.tag}+{block.disable_delay}disable'
-                            del self.afters[id]
-                        id = f'{block.tag}+{block.disable_delay}disable'
-                        if not id in self.afters:
-                            self.afters[id] = self.root.after(block.disable_delay, disable)
+                            
                     if count > 8:
                         self.die()
                         break
@@ -756,9 +774,26 @@ class Game:
                 if time() - trigger.last_press > 0.5:
                     trigger.func()
                     trigger.last_press = time()
-                if trigger.touch_disable:
-                    self.canvas.itemconfigure(trigger.tag, state = 'hidden')
-                    self.disabled_tags.append(trigger.tag)
+                    if trigger.touch_disable:
+                        STEPSIZE = 10
+                        id = f'{trigger.tag}+{trigger.disable_delay}disable'
+                        base_color = self.canvas.itemcget(trigger.tag, 'fill')
+                        steps = trigger.disable_delay / STEPSIZE
+                        gradient = Color(base_color).range_to(fade_to_bg(base_color, 0.3), int(steps))
+                        grad_list = [a for a in gradient]
+                        
+                        def disable(trigger = trigger, id = id, gradient = gradient, index = 0):
+                            try:
+                                col = grad_list[index]
+                            except IndexError: 
+                                del self.afters[id]
+                                self.disabled_tags.append(trigger.tag)
+                            else:
+                                self.canvas.itemconfigure(trigger.tag, fill = col.get_hex(), outline = deluminance(col.get_hex()))
+                                self.afters[id] = self.root.after(STEPSIZE, disable, trigger, id, gradient, index + 1)
+                            
+                        if not id in self.afters:
+                            self.afters[id] = self.root.after(STEPSIZE, disable)
         
         if self.test_player(self.level.goal):
             self.touch_goal()
@@ -947,7 +982,8 @@ class Game:
             self.canvas.create_text(x - 1, y - 1, font = self.mini_font, anchor = CENTER, tag = tag, text = '$', justify = CENTER)
             
         for toggle in draw_lvl.toggles:
-            def callback(delay = toggle.delay, tag = toggle.tag):
+            normal_col = self.canvas.itemcget(toggle.tag, 'fill')
+            def callback(delay = toggle.delay, tag = toggle.tag, normal_col = normal_col):
                 if not self.playing:
                     return
                 object = None
@@ -955,7 +991,7 @@ class Game:
                     if obj.tag == tag:
                         object = obj
                 if tag in self.disabled_tags:
-                    self.canvas.itemconfigure(tag, state = 'normal')
+                    self.canvas.itemconfigure(tag, fill = normal_col, outline = deluminance(normal_col))
                     if tag in self.disabled_tags:
                         self.disabled_tags.remove(tag)
                     if object != None and self.test_player(object):
@@ -963,9 +999,9 @@ class Game:
                         return
                 else:
                     self.disabled_tags.append(tag)
-                    self.canvas.itemconfigure(tag, state = 'hidden')
+                    self.canvas.itemconfigure(tag, fill = fade_to_bg(normal_col, 0.3), outline = fade_to_bg(normal_col, 0.2))
                 self.afters[f'{delay}.{tag}toggle'] = self.root.after(delay, callback, delay, tag)
-            self.afters[f'{toggle.delay}.{toggle.tag}toggle'] = self.root.after(toggle.delay, callback, toggle.delay, toggle.tag)
+            self.afters[f'{toggle.delay}.{toggle.tag}toggle'] = self.root.after(toggle.delay, callback, toggle.delay, toggle.tag, normal_col)
             
         for movement in draw_lvl.movements:
             moves = movement.moves
@@ -1073,7 +1109,8 @@ class Game:
             
             sprite = self.round_rectangle(*positions(trigger.dimensions), fill = trigger.color[0], tag = (trigger.tag, 'level'), radius = 5)
             trig = self.level.triggers[index]
-            def callbacks(index = index, sprite = sprite):
+            normal_col = self.canvas.itemcget(trig.disable_tag, 'fill')
+            def callbacks(index = index, sprite = sprite, normal_col = normal_col):
                 trig = self.level.triggers[index]
                 if not self.playing:
                     return
@@ -1081,18 +1118,18 @@ class Game:
                     self.level.triggers[index].enabled = False
                     col = trigger.color[0]
                     self.canvas.itemconfigure(sprite, fill = col, outline = deluminance(col))
-                    self.canvas.itemconfigure(trig.disable_tag, state = 'hidden')
+                    self.canvas.itemconfigure(trig.disable_tag, fill = fade_to_bg(normal_col, 0.3), outline = fade_to_bg(normal_col, 0.2))
                     self.disabled_tags.append(trig.disable_tag)
                 else:
                     self.level.triggers[index].enabled = True
                     col = trigger.color[1]
                     self.canvas.itemconfigure(sprite, fill = col, outline = deluminance(col))
-                    self.canvas.itemconfigure(trig.disable_tag, state = 'normal')
+                    self.canvas.itemconfigure(trig.disable_tag, fill = normal_col, outline = deluminance(normal_col))
                     if trig.disable_tag in self.disabled_tags:
                         self.disabled_tags.remove(trig.disable_tag)
                         
-            callbacks(index, sprite)
-            callbacks(index, sprite)
+            callbacks()
+            callbacks()
                     
             trig.func = callbacks
         
@@ -1101,7 +1138,7 @@ class Game:
         self.canvas.create_image(x, y, image = self.goal_img, tag = ('level', 'goal'), anchor = tk.NW)
         
     #https://stackoverflow.com/questions/44099594/how-to-make-a-tkinter-canvas-rectangle-with-rounded-corners
-    def round_rectangle(self, x1, y1, x2, y2, radius=PLAYER_SIZE / 4, **kwargs):
+    def round_rectangle(self, x1, y1, x2, y2, radius = 5, **kwargs):
         radius *= 3
     
         points = [x1+radius, y1,
@@ -1153,9 +1190,16 @@ def in_block(player, block, check = BOTH):
     if check == X:
         return xin
     
-def deluminance(col):
+def fade_to_bg(color, step = 0.8):
+    step *= 10
+    bg = Color('#1f1f1f')
+    gradient = bg.range_to(color, 10)
+    
+    return next(x for i,x in enumerate(gradient) if i == step)
+    
+def deluminance(col, modifier = 0.8):
     color = Color(col)
-    color.set_luminance(color.get_luminance() * 0.8)
+    color.set_luminance(color.get_luminance() * modifier)
     return color.get_hex()
 
 Game()
