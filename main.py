@@ -441,7 +441,8 @@ class Game:
             .add_movement((4, 0), reps = 20, delay = 30, tag = 'moveblock')\
             .add_spikes(300, 600, 700, 90)\
             .add_ground_spikes()\
-            .add_coin(990 - PLAYER_SIZE, 100, 'coin1')
+            .add_coin(990 - PLAYER_SIZE, 100, 'coin1')\
+            .unlock()
         
         self.levels[1].blocks[0].dimensions[2] -= 20
         self.levels[1]\
@@ -545,10 +546,14 @@ class Game:
             .add_spikes(120, 550, 30, 40)\
             .add_spikes(10, 350, 30, 40)\
             .set_goal(10, 220, 0, 0)
-            
-        self.unlocked = len([0 for a in self.levels if a.unlocked])
         
+        try:
+            old = self.unlocked
+        except:
+            old = 0
+            
         self.load_data()
+        self.unlocked = max(old, self.unlocked)
             
     def show_blur(self):
         self.root.update_idletasks()
