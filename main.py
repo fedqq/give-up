@@ -380,7 +380,7 @@ class Game:
         
         for col in range(3):
             frame.columnconfigure(col, weight = 1)
-        for row in range(9):
+        for row in range(floor(len(self.levels) / 3) + 5):
             frame.rowconfigure(row, weight = 1)
             
         self.last_image = tk.PhotoImage(file = 'last.png')
@@ -422,13 +422,12 @@ class Game:
             infobtn = ttk.Button(frame, text = 'Info', style = 'Mini.Accent.TButton', state = state, width = 4, command = show_info)
             infobtn.grid(column = x, row = y, sticky = tk.NE)
             
-        
         frame.place(relx = 0.5, rely = 0.7, anchor = tk.CENTER, relwidth = 0.9, relheight = 0.9)
         
     def get_exit_btn(self, master, cmd = None, style = 'Mini', width = 2):
         if cmd == None:
             cmd = self.root.destroy
-        return ttk.Button(master, text = 'X', style = f'{style}.Accent.TButton', command = cmd, width = width)
+        return ttk.Button(master, text = '✕', style = f'{style}.Accent.TButton', command = cmd, width = width)
             
     def reset_levels(self):
         self.levels = [Level() for _ in range(0, 6)]
