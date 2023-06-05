@@ -161,7 +161,7 @@ class Level:
         return self
     
     def add_ground_spikes(self, color = colors[SPIKES], tag = 'none'):
-        self.add_spikes(0, 950, 1000, 50, color = color, tag = tag)
+        self.add_spikes(10, 950, 980, 40, color = color, tag = tag)
         return self
     
     def add_flipper(self, x, y, width, height, tag = 'none', color = colors[FLIPPER], touchdisable = False, disabledelay = DEFAULT_DELAY):
@@ -336,10 +336,13 @@ class Game:
         ttk.Label(window, text = 'Game Options', font = self.small_font, justify = CENTER).place(relx = 0.5, rely = 0.1, anchor = tk.CENTER)
         
         clear_btn = ttk.Button(window, text = 'Clear Save Data', style = 'Mini.Accent.TButton', command = clear_data, width = 16)
-        clear_btn.place(relx = 0.5, rely = 0.6, anchor = tk.CENTER)
+        clear_btn.place(relx = 0.5, rely = 0.5, anchor = tk.CENTER)
         
         gradient_check = ttk.Checkbutton(window, text = 'Player Color Gradient', command = toggle_color, variable = gradient_bool, style = 'Button.TCheckbutton')
-        gradient_check.place(relx = 0.5, rely = 0.8, anchor = tk.CENTER)
+        gradient_check.place(relx = 0.5, rely = 0.7, anchor = tk.CENTER)
+        
+        circle_check = ttk.Checkbutton(window, text = 'Jump Circles', command = toggle_circle, variable = circles_bool, style = 'Button.TCheckbutton')
+        circle_check.place(relx = 0.5, rely = 0.8, anchor = tk.CENTER)
         
     def press_key(self, key):
         if not self.playing:
@@ -506,7 +509,7 @@ class Game:
             .add_block(100, 700, 100, 50, 'test')\
             .add_block(220, 0, 70, 500)\
             .add_block(600, 400, 200, 50)\
-            .add_block(855, 199, 200, 50, 'block')\
+            .add_block(855, 200, 135, 50, 'block')\
             .add_trigger(180, 10, 0, 0, 'test', color = colors[TRIGGERFLIP])\
             .add_trigger(10, 450, 0, 0, 'pad', color = colors[TRIGGERFLIP])\
             .set_goal(960, 10, 30, 30)\
@@ -540,10 +543,10 @@ class Game:
             .add_block(10, 160, 140, 100)\
             .add_spikes(160, 160, 300, 40)\
             .add_block(470, 160, 250, 40)\
-            .add_spikes(730, 160, 250, 40, 'downblock')\
+            .add_spikes(730, 160, 260, 40, 'downblock')\
             .add_time_toggle('downblock', 1200)\
             .add_block(160, 210, 700, 50)\
-            .add_block(160, 460, 820, 75)\
+            .add_block(160, 460, 830, 75)\
             .add_spikes(800, 340, 50, 110)\
             .add_flipper(810, 270, 0, 0, touchdisable = True, disabledelay = 100)\
             .add_spikes(600, 270, 50, 110)\
@@ -559,7 +562,11 @@ class Game:
             .add_spikes(515, 700, 75, 240)\
             .add_block(600, 865, 200, 75)\
             .add_spikes(810, 700, 75, 240)\
-            .set_goal(945, 560, 0, 0)\
+            .set_goal(10, 800, 0, 0)\
+            .add_spikes(10, 750, 75, 30, 'goalblocker')\
+            .add_spikes(55, 785, 30, 75, 'goalblocker')\
+            .add_block(895, 865, 95, 75)\
+            .add_trigger(895, 855 - PLAYER_SIZE, 0, 0, 'goalblocker', enabled = True)\
             .unlock()
             
         self.levels[5]\
@@ -665,11 +672,11 @@ class Game:
             delete()
             self.clear_afters()
             def start():
+                self.playing = True
                 self.load_level(self.levels[self.current_level])
                 self.start_game()
-                self.playing = True
                 self.max_delay = 20000
-            self.root.after(20, start)
+            self.root.after(50, start)
             
         def show_select():
             delete()
@@ -806,7 +813,9 @@ class Game:
                     
         for coin in self.level.coins:
             if self.test_player(coin):
-                self.canvas.itemconfigure(coin.tag, fill = '#ababab')
+                color = self.canvas.itemcget(f'{coin.tag}sprite', 'fill')
+                color = fade_to_bg(color)
+                self.canvas.itemconfigure(f'{coin.tag}sprite', fill = color, outline = darken(color))
                 self.disabled_tags.append(coin.tag)
                 self.coins_collected += 1
         
@@ -901,6 +910,7 @@ class Game:
     def clear_afters(self):
         for key in self.afters:
             self.root.after_cancel(key)
+        self.afters = {}
         
     def win(self):
         self.clear_afters()
@@ -948,9 +958,9 @@ class Game:
             self.max_delay = 1
             self.clear_afters()
             def start():
+                self.playing = True
                 self.load_level(self.levels[self.current_level])
                 self.start_game()
-                self.playing = True
                 self.max_delay = 20000
             self.root.after(10, start)
             
@@ -1006,9 +1016,9 @@ class Game:
             self.max_delay = 1
             self.clear_afters()
             def start():
+                self.playing = True
                 self.load_level(self.levels[self.current_level])
                 self.start_game()
-                self.playing = True
                 self.max_delay = 20000
             self.root.after(10, start)
             
@@ -1082,7 +1092,7 @@ class Game:
             x, y, width, height = coin.dimensions
             x += width / 2
             y += height / 2
-            self.round_rectangle(*positions(coin.dimensions), fill = coin.color, tag = tag, radius = 5)
+            self.round_rectangle(*positions(coin.dimensions), fill = coin.color, tag = tag + [f'{coin.tag}sprite'], radius = 5)
             self.canvas.create_text(x - 1, y - 1, font = self.mini_font, anchor = CENTER, tag = tag, text = '$', justify = CENTER)
             
         for toggle in draw_lvl.toggles:
@@ -1178,7 +1188,7 @@ class Game:
             
             normal_color = self.canvas.itemcget(trig_obj.disable_tag, 'fill')
             
-            def callbacks(index = index, sprite = trigger_sprite, normal_color = normal_color):
+            def callbacks(index = index, sprite = trigger_sprite, normal_color = normal_color, trig_obj = trig_obj):
                 if not (self.playing or self.paused):
                     return
                 
@@ -1206,8 +1216,8 @@ class Game:
                     if disable_tag in self.disabled_tags:
                         self.disabled_tags.remove(disable_tag)
                         
-            callbacks()
-            callbacks()
+            callbacks(index, trigger_sprite, normal_color)
+            callbacks(index, trigger_sprite, normal_color)
                     
             self.level.triggers[index].func = callbacks
         
