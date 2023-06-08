@@ -216,6 +216,7 @@ class Game:
         
         self.exit_button(taskbar, self.root.destroy, style = 'SuperMini', width = 3).pack(side = RIGHT, padx = 10, pady = 5)
         ttk.Button(taskbar, text = '⚙', command = self.show_settings, style = 'SuperMini.Accent.TButton', width = 3).pack(side = RIGHT, padx = 10, pady = 5)
+        ttk.Button(taskbar, text = '❓', command = self.show_tutorial, style = 'SuperMini.Accent.TButton', width = 3).pack(side = RIGHT, padx = 10, pady = 5)
         ttk.Label(taskbar, text = 'Platformer', font = self.small_font).pack(side = LEFT, padx = 10, pady = 10)
         
         self.root.update_idletasks()
@@ -305,8 +306,61 @@ class Game:
         style.configure('Mini.Accent.TButton', font = self.mini_font)
         style.configure('SuperMini.Accent.TButton', font = self.super_mini_font)
         style.configure('Button.TCheckbutton', font = self.super_mini_font)
+        style.configure('TNotebook.Tab', font = self.mini_font)
 
         self.root.mainloop()
+        
+    def show_tutorial(self):
+        window = tk.Toplevel(self.root, width = self.cwidth / 3, height = self.cheight / 3)
+        window.resizable(False, False)
+        window.grab_set()
+        window.title('How To Play')
+        
+        title = lambda text, root: ttk.Label(root, text = f' {text}', font = self.mini_font).place(relx = 0.5, rely = 0.05, anchor = tk.N)
+        text = lambda text, root, fill = 'white', **kwargs: ttk.Label(root, text = text, foreground = fill, font = self.super_mini_font, **kwargs)
+        
+        REL_X = 0.3
+        
+        notebook = ttk.Notebook(window)
+        
+        controls = ttk.Frame(notebook, width = self.cwidth / 4, height = self.cheight / 4)
+        title('Controls:', controls)
+        text('W or space or up arrow to jump', controls) .place(relx = 0.5, rely = 0.3, anchor = CENTER)
+        text('A or left arrow to move left', controls)   .place(relx = 0.5, rely = 0.45, anchor = CENTER)
+        text('D or right arrow to move right', controls) .place(relx = 0.5, rely = 0.6, anchor = CENTER)
+        text('Space to restart', controls)               .place(relx = 0.5, rely = 0.75, anchor = CENTER)
+        text('Escape to pause', controls)               .place(relx = 0.5, rely = 0.9, anchor = CENTER)
+        
+        general = ttk.Frame(notebook, width = self.cwidth / 4, height = self.cheight / 4)
+        title('General:', general)
+        text('Gray ', general, colors[BLOCK])   .place(relx = REL_X, rely = 0.3, anchor = tk.E)
+        text('blocks are normal', general)      .place(relx = REL_X, rely = 0.3, anchor = tk.W)
+        text('Blue ', general, colors[FLIPPER]) .place(relx = REL_X, rely = 0.45, anchor = tk.E)
+        text('blocks flip gravity', general)    .place(relx = REL_X, rely = 0.45, anchor = tk.W)
+        text('Red ', general, colors[SPIKES])   .place(relx = REL_X, rely = 0.6, anchor = tk.E)
+        text('blocks kill you', general)        .place(relx = REL_X, rely = 0.6, anchor = tk.W)
+        text('Yellow ', general, colors[PAD])   .place(relx = REL_X, rely = 0.75, anchor = tk.E)
+        text('blocks boost you up', general)    .place(relx = REL_X, rely = 0.75, anchor = tk.W)
+        text('The flag is the goal', general)   .place(relx = 0.5, rely = 0.9, anchor = CENTER)
+        
+        specials = ttk.Frame(notebook, width = self.cwidth / 4, height = self.cheight / 4)
+        title('Specials:', specials)
+        
+        text('Some blocks fade\naway when touched', specials, justify = CENTER)\
+                                                        .place(relx = 0.5, rely = 0.55, anchor = CENTER)
+        text('Small red blocks\nmake others turn off or on', specials, justify = CENTER)\
+                                                        .place(relx = 0.5, rely = 0.8, anchor = CENTER)
+        text('Yellow ', specials, colors[COIN])         .place(relx = REL_X - 0.1, rely = 0.3, anchor = tk.E)
+        text('blocks with $ are extra coins', specials) .place(relx = REL_X - 0.1, rely = 0.3, anchor = tk.W)
+        
+        general.pack(expand = True, fill = BOTH)
+        controls.pack(expand = True, fill = BOTH)
+        specials.pack(expand = True, fill = BOTH)
+        notebook.add(controls, text = 'Controls', sticky = 'NSEW')
+        notebook.add(general, text = 'General', sticky = 'NESW')
+        notebook.add(specials, text = 'Specials', sticky = 'NESW')
+        notebook.select(0)
+        notebook.pack(expand = True, padx = 10, pady = 10)
         
     def show_settings(self):
         def clear_data():
@@ -418,22 +472,22 @@ class Game:
         self.canvas.create_text(self.cwidth / 2, self.cheight / 10, text = 'Select a level', font = self.big_font, anchor = tk.CENTER, tag = 'text', fill = 'white')
         
         for column in range(3):
-            frame.columnconfigure(column, weight = 1)
+            frame.columnconfigure(column, weight = 2)
         for row in range(floor(len(self.levels) / 3) + 5):
-            frame.rowconfigure(row, weight = 1)
+            frame.rowconfigure(row, weight = 2, pad = 10)
             
         self.last_image = tk.PhotoImage(file = 'last.png')
+        self.crop_image = tk.PhotoImage(file = 'smaller.png')
         
         self.canvas.create_image(0, 0, anchor = tk.NW, image = self.last_image, tag = 'img')
         self.canvas.tag_raise('text')
-        
-        self.crop_image = tk.PhotoImage(file = 'smaller.png')
         
         ttk.Label(frame, image = self.crop_image).place(x = 0, y = 0)
             
         for index in range(len(self.levels)):
             
             def show_info(index = index):
+                
                 window = tk.Toplevel(self.root, background = '#1C1C1C', width = self.cwidth / 3, height = self.cheight / 3)
                 window.title(f'Level {index + 1} Information')
                 window.resizable(False, False)
@@ -463,7 +517,53 @@ class Game:
             state = 'normal' if self.levels[index].unlocked else 'disabled'
                 
             open_btn = ttk.Button(frame, text = str(index + 1), style = 'Big.Accent.TButton', command = open_level, width = 4, state = state)
-            open_btn.grid(column = x, row = y, padx = 30, pady = 25, sticky = tk.NSEW)
+            open_btn.grid(column = x, row = y, padx = 30, pady = 30, sticky = tk.NSEW)
+            
+            UPPER_LIMIT = 30
+            LOWER_LIMIT = 27
+            DELAY = 2
+            open_btn.on = False
+            open_btn.padx = 30
+            open_btn.pady = 25
+            
+            def on_enter(e, button: ttk.Button = open_btn):
+                button.on = True
+                bigger_loop(button)
+            
+            def bigger_loop(button):
+                padx = max(button.padx - 2, LOWER_LIMIT)
+                pady = max(button.pady - 2, LOWER_LIMIT)
+                button.padx = padx
+                button.pady = pady
+                
+                try:
+                    button.grid_configure(pady = pady, padx = padx)
+                except:
+                    return
+                if button.on:
+                    if padx > LOWER_LIMIT:
+                        self.root.after(DELAY, bigger_loop, button)
+                
+            def on_leave(e, button: ttk.Button = open_btn):
+                button.on = False
+                shrink_loop(button)
+            
+            def shrink_loop(button):
+                padx = min(button.padx + 2, UPPER_LIMIT)
+                pady = min(button.pady + 2, UPPER_LIMIT)
+                button.padx = padx
+                button.pady = pady
+                try:
+                    button.grid_configure(pady = pady, padx = padx)
+                except:
+                    return
+                if not button.on:
+                    if padx < UPPER_LIMIT:
+                        self.root.after(DELAY, shrink_loop, button)
+            
+            open_btn.bind('<Enter>', on_enter)
+            open_btn.bind('<Leave>', on_leave)
+            
             info_btn = ttk.Button(frame, text = 'Info', style = 'Mini.Accent.TButton', state = state, width = 4, command = show_info)
             info_btn.grid(column = x, row = y, sticky = tk.NE)
             
@@ -482,7 +582,7 @@ class Game:
             .add_block(640, 390, 350, 50, touchdisable = True)\
             .add_trigger(520, 100, 0, 0, 'bigspikes', enabled = True, touchdisable = True)\
             .add_block(0, 700, 200, 50)\
-            .add_block(400, 900, 200, 50, 'moveblock')\
+            .add_block(400, 890, 200, 50, 'moveblock')\
             .add_movement((4, 0), reps = 20, delay = 30, tag = 'moveblock')\
             .add_spikes(300, 600, 700, 90)\
             .add_ground_spikes()\
@@ -634,6 +734,8 @@ class Game:
             
     def show_blur(self):
         self.root.update_idletasks()
+        self.canvas.delete('circle')
+        self.canvas.update()
         
         width, height = self.root.winfo_width(), self.root.winfo_height()
         
@@ -664,11 +766,12 @@ class Game:
             return
         
         def delete():
+            self.root.bind('<space>', func(self.press_key, TOP))
             self.canvas.delete('all')
             restart_btn.destroy()
             select_btn.destroy()
         
-        def restart():
+        def restart(*args):
             delete()
             self.clear_afters()
             def start():
@@ -697,6 +800,8 @@ class Game:
         
         select_btn = ttk.Button(self.canvas, text = 'Level Select Menu', style = 'Small.Accent.TButton', command = show_select, width = 16)
         select_btn.place(relx = 0.5, rely = 0.6, anchor = CENTER)
+        
+        self.root.after(10, lambda *a: self.root.bind('<space>', restart))
         
     def start_game(self):
         self.player     = [100, 100]
@@ -765,7 +870,7 @@ class Game:
             
         self.grounded = False
         
-        STEPSIZE = 10
+        STEPSIZE = 5
         
         def get_id(obj):
             return f'{obj.tag}+{obj.disable_delay}disable{obj.type}'
@@ -775,7 +880,7 @@ class Game:
             steps = obj.disable_delay / STEPSIZE
             id = get_id(obj)
             base_color = self.canvas.itemcget(obj.tag, 'fill')
-            gradient = Color(base_color).range_to(fade_to_bg(base_color), int(steps))
+            gradient = Color(base_color).range_to(fade_to_bg(base_color, 2), int(steps))
             grad_list = [color.get_hex() for color in gradient]
             
             def disable(obj = obj, id = id, grad_list = grad_list, index = 0):
