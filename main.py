@@ -7,7 +7,7 @@ from copy import copy, deepcopy
 from ctypes import windll
 from time import time
 from math import floor
-from colour import Color, HSL, hsl2hex
+from colour import Color
 from PIL import ImageTk, ImageFilter, Image
 import pyautogui
 import colorsys
@@ -17,9 +17,10 @@ OBJCOUNTER = 0
 '''windll.shcore.SetProcessDpiAwareness(False)'''
 
 PLAYER_SIZE = 30
-DEBUG = True
+DEBUG = False
 TRANSPARENT = '#ab23ff'
 DEFAULT_DELAY = 1500
+FADE_STEPSIZE = 5
 
 BLOCK, PAD, MOVEMENT, SPIKES, TOGGLE, GOAL, TRIGGER, TRIGGERFLIP, FLIPPER, COIN = 'block', 'pad', 'movement', 'spikes', 'toggle', 'goal', 'trigger', 'triggerflip', 'flipper', 'coin'
 
@@ -546,7 +547,7 @@ class Game:
                 
             def on_leave(e, button: ttk.Button = open_btn):
                 button.on = False
-                shrink_loop(button)
+                button.grid_configure(pady = UPPER_LIMIT, padx = UPPER_LIMIT)
             
             def shrink_loop(button):
                 padx = min(button.padx + 2, UPPER_LIMIT)
@@ -557,9 +558,9 @@ class Game:
                     button.grid_configure(pady = pady, padx = padx)
                 except:
                     return
-                if not button.on:
-                    if padx < UPPER_LIMIT:
-                        self.root.after(DELAY, shrink_loop, button)
+                    
+                if not button.on and padx < UPPER_LIMIT:
+                    self.root.after(DELAY, shrink_loop, button)
             
             open_btn.bind('<Enter>', on_enter)
             open_btn.bind('<Leave>', on_leave)
@@ -575,7 +576,7 @@ class Game:
         return ttk.Button(master, text = '✕', style = f'{style}.Accent.TButton', command = cmd, width = width)
             
     def reset_levels(self):
-        self.levels = [Level() for _ in range(0, 6)]
+        self.levels = [Level() for _ in range(0, 7)]
         
         self.levels[0]\
             .add_spikes(0, 300, 1000, 50, 'bigspikes')\
@@ -771,7 +772,7 @@ class Game:
             restart_btn.destroy()
             select_btn.destroy()
         
-        def restart(*args):
+        def restart(*_):
             delete()
             self.clear_afters()
             def start():
@@ -801,7 +802,7 @@ class Game:
         select_btn = ttk.Button(self.canvas, text = 'Level Select Menu', style = 'Small.Accent.TButton', command = show_select, width = 16)
         select_btn.place(relx = 0.5, rely = 0.6, anchor = CENTER)
         
-        self.root.after(10, lambda *a: self.root.bind('<space>', restart))
+        self.root.after(10, lambda *_: self.root.bind('<space>', restart))
         
     def start_game(self):
         self.player     = [100, 100]
@@ -855,30 +856,14 @@ class Game:
                     return True
                 
         return True in players_in
-        
-    def physics_loop(self):
-        if not self.playing:
-            return
-        self.canvas.delete('player')
-        
-        under_max = self.y_speed > -12
-        if self.gravity == 1:
-            under_max = self.y_speed < 12
-        
-        if under_max and not self.grounded:
-            self.y_speed += 1 * self.gravity
-            
-        self.grounded = False
-        
-        STEPSIZE = 5
-        
-        def get_id(obj):
+    
+    def get_id(self, obj):
             return f'{obj.tag}+{obj.disable_delay}disable{obj.type}'
-        
-        def get_disable(obj: LevelElement):
+    
+    def get_disable(self, obj: LevelElement):
             
-            steps = obj.disable_delay / STEPSIZE
-            id = get_id(obj)
+            steps = obj.disable_delay / FADE_STEPSIZE
+            id = self.get_id(obj)
             base_color = self.canvas.itemcget(obj.tag, 'fill')
             gradient = Color(base_color).range_to(fade_to_bg(base_color, 2), int(steps))
             grad_list = [color.get_hex() for color in gradient]
@@ -891,14 +876,32 @@ class Game:
                     self.disabled_tags.append(obj.tag)
                 else:
                     self.canvas.itemconfig(obj.tag, fill = color, outline = darken(color))
-                    self.afters[id] = self.root.after(STEPSIZE, disable, obj, id, grad_list, index + 1)
+                    self.afters[id] = self.root.after(FADE_STEPSIZE, disable, obj, id, grad_list, index + 1)
                     
             return disable
+        
+    def physics_loop(self):
+        if not self.playing:
+            return
+        self.canvas.delete('player')
+        
+        STEPSIZE = 10
+        
+        under_max = self.y_speed > -12
+        if self.gravity == 1:
+            under_max = self.y_speed < 12
+        
+        if under_max and not self.grounded:
+            self.y_speed += 1 * self.gravity
+            
+        self.grounded = False
+        
+        get_disable = self.get_disable
         
         for pad in self.level.pads:
             if self.test_player(pad):
                 
-                id = get_id(pad)
+                id = self.get_id(pad)
                 if pad.touch_disable and not id in self.afters:
                     self.afters[id] = self.root.after(STEPSIZE, get_disable(pad))
                         
@@ -909,7 +912,7 @@ class Game:
             if self.test_player(flipper):
                 if time() - flipper.last_trigger > 0.5:
                     
-                    id = get_id(flipper)
+                    id = self.get_id(flipper)
                     if flipper.touch_disable and not id in self.afters:
                         self.afters[id] = self.root.after(STEPSIZE, get_disable(flipper))
                         
@@ -945,7 +948,7 @@ class Game:
                         
                 if failed:
                     STEPSIZE = 10
-                    id = get_id(block)
+                    id = self.get_id(block)
                     if block.touch_disable and test and not id in self.afters:
                         self.afters[id] = self.root.after(STEPSIZE, get_disable(block))  
                     break
@@ -982,7 +985,7 @@ class Game:
                     trigger.func()
                     trigger.last_trigger = time()
                     
-                    id = get_id(trigger)
+                    id = self.get_id(trigger)
                     if trigger.touch_disable and not id in self.afters:
                         self.afters[id] = self.root.after(STEPSIZE, get_disable(trigger))
         
@@ -990,7 +993,7 @@ class Game:
             self.touch_goal()
             return
         
-        x, y = copy(self.player)
+        x, y = self.player
         x = self.proportion(x, False)
         y = self.proportion(y, False)
         size = self.proportion(PLAYER_SIZE)
@@ -1329,7 +1332,6 @@ class Game:
         x, y, width, height = draw_lvl.goal.dimensions
         self.goal_img = ImageTk.PhotoImage(Image.open('goalflag.png').resize((width, height), resample = Image.LANCZOS))
         self.canvas.create_image(x, y, image = self.goal_img, tag = ('level', 'goal'), anchor = tk.NW)
-        
     
     def round_rectangle(self, x1, y1, x2, y2, radius = 5, **kwargs):
         #https://stackoverflow.com/questions/44099594/how-to-make-a-tkinter-canvas-rectangle-with-rounded-corners
@@ -1370,7 +1372,7 @@ class Game:
         return n
         
 def func(f, *args):
-    return lambda *a: f(*args)
+    return lambda *_: f(*args)
 
 def in_block(player, block, check = BOTH):
     xin, yin = False, False

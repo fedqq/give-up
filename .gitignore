@@ -1,7 +1,8 @@
 savedata.bak
 savedata.dat
 savedata.dir
-savedata.dat
-savedata.dat
 last.png
 smaller.png
+build/
+dist/
+*.spec
